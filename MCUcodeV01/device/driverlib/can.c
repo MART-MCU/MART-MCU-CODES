@@ -80,6 +80,8 @@ CAN_initModule(uint32_t base)
     // Enable write access to the configuration registers
     //
     HWREGH(base + CAN_O_CTL) |= CAN_CTL_CCE;
+
+    HWREGH(base + CAN_O_CTL) |= CAN_CTL_DAR;
 }
 
 //*****************************************************************************

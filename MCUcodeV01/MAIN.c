@@ -2,7 +2,7 @@
 
 // EDITED BY: PABLO MORA MORENO & PAULA GIL-CEPEDA GÓMEZ
 
-// RELEASE: V0.01 (VX.YY - >> X = 0 Indicates that this release has been tested only in evaluation board <<)
+// RELEASE: V1.00 (VX.YY - >> X = 0 Indicates that this release has been tested only in evaluation board <<)
 
 // DATE: 08/03/2024 10:02
 
@@ -20,7 +20,8 @@
 //
 // Defines
 //
-#define MSG_DATA_LENGTH    0   // "Don't care" for a Receive mailbox //REVISAR QUE SIGNIFICA ESTE DATA LENGTH
+#define MSG_DATA_LENGTH_RX 0   // "Don't care" for a Receive mailbox //REVISAR QUE SIGNIFICA ESTE DATA LENGTH
+#define MSG_DATA_LENGTH_TX 8
 
 #define RX_MSG_OBJ_ID1     1   // Use mailbox 1
 #define RX_MSG_OBJ_ID2     2   // Use mailbox 2
@@ -28,14 +29,14 @@
 #define RX_MSG_OBJ_ID4     4   // Use mailbox 4
 #define RX_MSG_OBJ_ID5     5   // Use mailbox 5
 
-#define TX_MSG_OBJ_ID1     16   // Use mailbox 16 // Set Current
-#define TX_MSG_OBJ_ID2     17   // Use mailbox 17 // Set Brake Current
-#define TX_MSG_OBJ_ID3     18   // Use mailbox 18 // Set Digital Output
-#define TX_MSG_OBJ_ID4     19   // Use mailbox 19 // Set Maximum AC Current
-#define TX_MSG_OBJ_ID5     20   // Use mailbox 20 // Set Maximum AC Brake Current
-#define TX_MSG_OBJ_ID6     21   // Use mailbox 21 // Set Maximum DC Current
-#define TX_MSG_OBJ_ID7     22   // Use mailbox 22 // Set Maximum DC Brake Current
-#define TX_MSG_OBJ_ID8     23   // Use mailbox 23 // Drive Enable
+#define TX_MSG_OBJ_ID1     6   // Use mailbox 16 // Set Current
+#define TX_MSG_OBJ_ID2     7   // Use mailbox 17 // Set Brake Current
+#define TX_MSG_OBJ_ID3     8   // Use mailbox 18 // Set Digital Output
+#define TX_MSG_OBJ_ID4     9   // Use mailbox 19 // Set Maximum AC Current
+#define TX_MSG_OBJ_ID5     10   // Use mailbox 20 // Set Maximum AC Brake Current
+#define TX_MSG_OBJ_ID6     11   // Use mailbox 21 // Set Maximum DC Current
+#define TX_MSG_OBJ_ID7     12   // Use mailbox 22 // Set Maximum DC Brake Current
+#define TX_MSG_OBJ_ID8     13   // Use mailbox 23 // Drive Enable
 
 #define LD                 0.000188 // Ld, Lq Motor Model Inductance (H)
 #define Rs                 0.01437  // Rs Motor Stator Winding Inductance (Ohms)
@@ -61,6 +62,7 @@ uint8_t rxMsgData4[8];
 uint8_t rxMsgData5[8];
 
 volatile uint32_t errorFlag = 0;
+float cnt = 0;
 
 int32_t ERPM_rear   = 0;
 int32_t cont_w      = 0;
@@ -84,7 +86,10 @@ uint8_t RX_reg      = 0;
 float BrkRmsCur     = 0;
 float AclRmsCur     = 0;
 uint8_t FaultCode   = 0;
+float    CANintCont = 0;
 
+uint32_t status1;
+uint32_t status2;
 //
 // Local Routines
 //
@@ -126,8 +131,6 @@ void main(void)
     // Initialize device clock and peripherals
     //
 
-    DINT;
-
     Device_init();
 
     //
@@ -141,11 +144,6 @@ void main(void)
     GPIO_setPinConfig(DEVICE_GPIO_CFG_CANRXB);
     GPIO_setPinConfig(DEVICE_GPIO_CFG_CANTXB);
 
-    //
-    // Configure GPIO pin which is toggled upon message reception
-    //
-    GPIO_setPadConfig(65U, GPIO_PIN_TYPE_STD);
-    GPIO_setDirectionMode(65U, GPIO_DIR_MODE_OUT);
 
     //
     // Initialize the CAN controller
@@ -165,6 +163,10 @@ void main(void)
     //
     CAN_enableInterrupt(CANB_BASE, CAN_INT_IE0 | CAN_INT_ERROR |
                         CAN_INT_STATUS);
+
+
+    //CAN_setInterruptMux(CANB_BASE, (5 << 1));
+
     //
     // Initialize PIE and clear PIE registers. Disables CPU interrupts.
     //
@@ -178,27 +180,17 @@ void main(void)
     //
     // Enable Global Interrupt (INTM) and real-time interrupt (DBGM)
     //
-
+    EINT;
+    ERTM;
     //
     // ISRs for each CPU Timer interrupt
     //
-    Interrupt_register(INT_TIMER0, &cpu_timer0_isr);
     Interrupt_register(INT_CANB0, &canbISR);
 
-    initCPUTimers();
 
-    configCPUTimer(CPUTIMER0_BASE, DEVICE_SYSCLK_FREQ, 1000000);
-
-    CPUTimer_enableInterrupt(CPUTIMER0_BASE);
     CAN_enableGlobalInterrupt(CANB_BASE, CAN_GLOBAL_INT_CANINT0);
 
-    Interrupt_enable(INT_TIMER0);
     Interrupt_enable(INT_CANB0);
-
-    CPUTimer_startTimer(CPUTIMER0_BASE);
-
-    EINT;
-    ERTM;
 
 
     // Initialize the receive message object used for receiving CAN messages.
@@ -219,27 +211,28 @@ void main(void)
 
     CAN_setupMessageObject(CANB_BASE, RX_MSG_OBJ_ID1, 0x401,
                            CAN_MSG_FRAME_STD, CAN_MSG_OBJ_TYPE_RX, 0,
-                           CAN_MSG_OBJ_NO_FLAGS, MSG_DATA_LENGTH);
+                           CAN_MSG_OBJ_RX_INT_ENABLE, MSG_DATA_LENGTH_RX);
     CAN_setupMessageObject(CANB_BASE, RX_MSG_OBJ_ID2, 0x421,
                            CAN_MSG_FRAME_STD, CAN_MSG_OBJ_TYPE_RX, 0,
-                           CAN_MSG_OBJ_NO_FLAGS, MSG_DATA_LENGTH);
+                           CAN_MSG_OBJ_RX_INT_ENABLE, MSG_DATA_LENGTH_RX);
     CAN_setupMessageObject(CANB_BASE, RX_MSG_OBJ_ID3, 0x441,
                            CAN_MSG_FRAME_STD, CAN_MSG_OBJ_TYPE_RX, 0,
-                           CAN_MSG_OBJ_NO_FLAGS, MSG_DATA_LENGTH);
+                           CAN_MSG_OBJ_RX_INT_ENABLE, MSG_DATA_LENGTH_RX);
     CAN_setupMessageObject(CANB_BASE, RX_MSG_OBJ_ID4, 0x461,
                            CAN_MSG_FRAME_STD, CAN_MSG_OBJ_TYPE_RX, 0,
-                           CAN_MSG_OBJ_NO_FLAGS, MSG_DATA_LENGTH);
+                           CAN_MSG_OBJ_RX_INT_ENABLE, MSG_DATA_LENGTH_RX);
     CAN_setupMessageObject(CANB_BASE, RX_MSG_OBJ_ID5, 0x481,
                            CAN_MSG_FRAME_STD, CAN_MSG_OBJ_TYPE_RX, 0,
-                           CAN_MSG_OBJ_NO_FLAGS, MSG_DATA_LENGTH);
+                           CAN_MSG_OBJ_RX_INT_ENABLE, MSG_DATA_LENGTH_RX);
     //
     // SETUP MESSAGE OBJECTS FOR TEXTING IN CAN BUS
     //
 
     CAN_setupMessageObject(CANB_BASE, TX_MSG_OBJ_ID1, 0x21,
                            CAN_MSG_FRAME_STD, CAN_MSG_OBJ_TYPE_TX, 0,
-                           CAN_MSG_OBJ_NO_FLAGS, MSG_DATA_LENGTH);
-    CAN_setupMessageObject(CANB_BASE, TX_MSG_OBJ_ID2, 0x41,
+                           CAN_MSG_OBJ_NO_FLAGS, MSG_DATA_LENGTH_TX);
+
+    /*CAN_setupMessageObject(CANB_BASE, TX_MSG_OBJ_ID2, 0x41,
                            CAN_MSG_FRAME_STD, CAN_MSG_OBJ_TYPE_TX, 0,
                            CAN_MSG_OBJ_NO_FLAGS, MSG_DATA_LENGTH);
     CAN_setupMessageObject(CANB_BASE, TX_MSG_OBJ_ID3, 0xE1,
@@ -259,7 +252,7 @@ void main(void)
                            CAN_MSG_OBJ_NO_FLAGS, MSG_DATA_LENGTH);
     CAN_setupMessageObject(CANB_BASE, TX_MSG_OBJ_ID8, 0x181,
                                CAN_MSG_FRAME_STD, CAN_MSG_OBJ_TYPE_TX, 0,
-                               CAN_MSG_OBJ_NO_FLAGS, MSG_DATA_LENGTH);
+                               CAN_MSG_OBJ_NO_FLAGS, MSG_DATA_LENGTH);*/
 
 
     //
@@ -270,8 +263,8 @@ void main(void)
 
     while(1)
     {
-        while(cpuTimer0IntCount == 0);
-        cpuTimer0IntCount = 0;
+        /*while(cpuTimer0IntCount == 0);
+        cpuTimer0IntCount = 0;*/
 
         //GpioDataRegs.GPASET.bit.GPIO0 = 1;
         cont_w++;
@@ -318,16 +311,14 @@ void main(void)
         /* A really conflictive control is flux weakening control, where rotor magnetic flux has to be decreased to afford higher velocities*/
         AclRmsCur = (float)IT_RATE*AclTorque;                                          // Target Phase Current based on
 
-        SetupMsgPhaseCurrent(txMsgData1, &AclRmsCur);
-        CAN_sendMessage(CANB_BASE, TX_MSG_OBJ_ID1, MSG_DATA_LENGTH, txMsgData1);
+        /*SetupMsgPhaseCurrent(txMsgData1, &AclRmsCur);
+        CAN_sendMessage(CANB_BASE, TX_MSG_OBJ_ID1, MSG_DATA_LENGTH_TX, txMsgData1);
 
         BrkTorque = (float)0.01*brake*MAX_PEAK_TOR;                                 // Calculated Output Torque rated to Brake signal
         BrkRmsCur = (float)IT_RATE*BrkTorque;
 
         SetupMsgPhaseCurrent(txMsgData1, &BrkRmsCur);
-        CAN_sendMessage(CANB_BASE, TX_MSG_OBJ_ID2, MSG_DATA_LENGTH, txMsgData2);
-
-        GPIO_togglePin(65U);
+        //CAN_sendMessage(CANB_BASE, TX_MSG_OBJ_ID2, MSG_DATA_LENGTH_TX, txMsgData2);*/
     }
 }
 
@@ -428,13 +419,14 @@ void main(void)
     Interrupt_clearACKGroup(INTERRUPT_ACK_GROUP9);
 }*/
 void canbISR(void){
-    uint32_t status;
-    status = CAN_getInterruptCause(CANB_BASE);
-    switch(status) {
+    ++CANintCont;
+    status1 = CAN_getInterruptCause(CANB_BASE);
+    switch(status1) {
             case CAN_INT_INT0ID_STATUS:
-                status = CAN_getStatus(CANB_BASE);
-                if(((status  & ~(CAN_STATUS_RXOK)) != CAN_STATUS_LEC_MSK) &&
-                   ((status  & ~(CAN_STATUS_RXOK)) != CAN_STATUS_LEC_NONE))
+                status2 = CAN_getStatus(CANB_BASE);
+
+                if(((status2  & ~(CAN_STATUS_RXOK)) != CAN_STATUS_LEC_MSK) &&
+                   ((status2  & ~(CAN_STATUS_RXOK)) != CAN_STATUS_LEC_NONE))
                 {
                     errorFlag = 1;
                 }
@@ -476,69 +468,6 @@ void canbISR(void){
     Interrupt_clearACKGroup(INTERRUPT_ACK_GROUP9);
 }
 
-void configCPUTimer(uint32_t cpuTimer, float freq, float period)
-{
-    uint32_t temp;
-
-    //
-    // Initialize timer period:
-    //
-    temp = (uint32_t)(freq * (float)0.000001 * period);
-    CPUTimer_setPeriod(cpuTimer, temp);
-
-    //
-    // Set pre-scale counter to divide by 1 (SYSCLKOUT):
-    //
-    CPUTimer_setPreScaler(cpuTimer, 0);
-
-    //
-    // Initializes timer control register. The timer is stopped, reloaded,
-    // free run disabled, and interrupt enabled.
-    // Additionally, the free and soft bits are set
-    //
-    CPUTimer_stopTimer(cpuTimer);
-    CPUTimer_reloadTimerCounter(cpuTimer);
-    CPUTimer_setEmulationMode(cpuTimer,
-                              CPUTIMER_EMULATIONMODE_STOPAFTERNEXTDECREMENT);
-    CPUTimer_enableInterrupt(cpuTimer);
-
-    //
-    // Resets interrupt counters for the three cpuTimers
-    //
-    if (cpuTimer == CPUTIMER0_BASE)
-    {
-        cpuTimer0IntCount = 0;
-    }
-}
-
-void initCPUTimers(void)
-{
-    //
-    // Initialize timer period to maximum
-    //
-    CPUTimer_setPeriod(CPUTIMER0_BASE, 0xFFFFFFFF);
-    //
-    // Initialize pre-scale counter to divide by 1 (SYSCLKOUT)
-    //
-    CPUTimer_setPreScaler(CPUTIMER0_BASE, 0);
-    //
-    // Make sure timer is stopped
-    //
-    CPUTimer_stopTimer(CPUTIMER0_BASE);
-    //
-    // Reload all counter register with period value
-    //
-    CPUTimer_reloadTimerCounter(CPUTIMER0_BASE);
-}
-
-interrupt void cpu_timer0_isr(void) // CPU Interrupt Subrutine
-{
-    cpuTimer0IntCount++;
-    //
-    // Acknowledge this interrupt to receive more interrupts from group 1
-    //
-    Interrupt_clearACKGroup(INTERRUPT_ACK_GROUP1);
-} // CPU Interrupt Subroutine
 
 /*void SetupEQEP(void)
 {
