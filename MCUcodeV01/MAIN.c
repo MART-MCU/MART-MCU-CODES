@@ -15,7 +15,8 @@
 //
 #include "driverlib.h"
 #include "device.h"
-#include "math.h" // Revisar inclusión de librería
+#include "math.h"
+#include "IQmathLib.h"
 
 //
 // Defines
@@ -23,21 +24,24 @@
 #define MSG_DATA_LENGTH_RX 0   // "Don't care" for a Receive mailbox //REVISAR QUE SIGNIFICA ESTE DATA LENGTH
 #define MSG_DATA_LENGTH_TX 8
 
+/* ----- READING MAILBOXES -----*/
 #define RX_MSG_OBJ_ID1     1   // Use mailbox 1
 #define RX_MSG_OBJ_ID2     2   // Use mailbox 2
 #define RX_MSG_OBJ_ID3     3   // Use mailbox 3
 #define RX_MSG_OBJ_ID4     4   // Use mailbox 4
 #define RX_MSG_OBJ_ID5     5   // Use mailbox 5
 
-#define TX_MSG_OBJ_ID1     6   // Use mailbox 16 // Set Current
-#define TX_MSG_OBJ_ID2     7   // Use mailbox 17 // Set Brake Current
-#define TX_MSG_OBJ_ID3     8   // Use mailbox 18 // Set Digital Output
-#define TX_MSG_OBJ_ID4     9   // Use mailbox 19 // Set Maximum AC Current
+/* ----- TEXTING MAILBOXES -----*/
+#define TX_MSG_OBJ_ID1     6   // Use mailbox 16  // Set Current
+#define TX_MSG_OBJ_ID2     7   // Use mailbox 17  // Set Brake Current
+#define TX_MSG_OBJ_ID3     8   // Use mailbox 18  // Set Digital Output
+#define TX_MSG_OBJ_ID4     9   // Use mailbox 19  // Set Maximum AC Current
 #define TX_MSG_OBJ_ID5     10   // Use mailbox 20 // Set Maximum AC Brake Current
 #define TX_MSG_OBJ_ID6     11   // Use mailbox 21 // Set Maximum DC Current
 #define TX_MSG_OBJ_ID7     12   // Use mailbox 22 // Set Maximum DC Brake Current
 #define TX_MSG_OBJ_ID8     13   // Use mailbox 23 // Drive Enable
 
+/* ----- ELECTRICAL PARAMETERTS -----*/
 #define LD                 0.000188 // Ld, Lq Motor Model Inductance (H)
 #define Rs                 0.01437  // Rs Motor Stator Winding Inductance (Ohms)
 #define LAMBDA_F           0.03275  // Lambda_f Rotor Magnetic Flux (mW)
@@ -45,15 +49,37 @@
 #define T_MAX              120      // Maximum Motor temperature (ºC)
 #define IT_RATE            1.9      // Rate Between Maximum Current & Maximum Torque (A/Nm)
 #define MAX_PEAK_POW       60       // Maximum Motor Peak Power (kW)
-#define MAX_CONT_POW       35       // Maximum Motor Continuoues Power (kW)
+#define MAX_CONT_POW       35       // Maximum Motor Continuous Power (kW)
 #define MAX_PEAK_TOR       100      // Maximum Motor Peak Torque (Nm)
-#define MAX_CONT_TOR       52       // Maximum Motor Continuoues Torque (Nm)
+#define MAX_CONT_TOR       52       // Maximum Motor Continuous Torque (Nm)
 #define MAX_MOT_RPM        8000     // Maximum Motor Angular Velocity (rpm)
+
+/* ----- TRANSMISSION PARAMETERTS -----*/
+#define J_M_CH             0        // Inertia from motor to transmission chain (kg/m^2)
+#define B_M_HC             0        // Viscous friction coefficient from motor to transmission chain (Nm·s/rad)
+#define J_CH_BR            0        // Inertia from chain to wheel and brake disc (kg/m^2)
+#define B_CH_BR            0        // Viscous friction coefficient from chain to wheel and brake disc (Nm·s/rad)
+#define CHI                4        // Speed & torque net transmission ratio (p.u.)
+#define R                  0.2      // Wheel radio (m)
+
+/* ----- RESISTANCE MODEL PARAMETERTS -----*/
+#define M_VEH              234      // Total vehicle mass (kg)
+#define GRAV               9.81     // Gravitational acceleration (m/s^2)
+#define DIFF_RAT           0.5      // Differential ratio (p.u.)
+#define LT                 1.8      // Total longitude between front and rear wheels (m)
+#define L1                 0.9      // Longitude between center of gravity (cog) and front wheels (m)
+#define H                  0.4      // Center of gravity height (m)
+#define RHO                1.25     // Air density at 25ºC and 1 atmospheres (kg/m^3)
+#define CX                 0.28     // Lengthwise aerodynamic coefficient
+#define AF                 1        // Front vehicle area (m^2)
+#define FR                 0.01     // Rolling coefficient
+
 
 //
 // Globals
 //
-uint16_t cpuTimer0IntCount;
+volatile int16_t cpuTimer0IntCount;
+
 // Input message arrays
 uint8_t rxMsgData1[8];
 uint8_t rxMsgData2[8];
@@ -93,8 +119,9 @@ uint32_t status2;
 //
 // Local Routines
 //
+void initEQEP(void);
+void initCPUTimer(void);
 void configCPUTimer(uint32_t, float, float);
-void initCPUTimers(void);
 //
 // External Routines
 //
@@ -110,7 +137,7 @@ extern void SetupMsgPhaseCurrent(uint8_t *CanMsgData, const float *ArmsCurr);
 // Function Prototypes
 //
 __interrupt void canbISR(void);     // Receive interrupt for CAN-B.
-interrupt void cpu_timer0_isr(void);
+__interrupt void cpuTimer0ISR(void);
 //
 // Main
 //
@@ -144,6 +171,17 @@ void main(void)
     GPIO_setPinConfig(DEVICE_GPIO_CFG_CANRXB);
     GPIO_setPinConfig(DEVICE_GPIO_CFG_CANTXB);
 
+    //
+    // Initialize GPIOs for use as EQEP1A, EQEP1B, and EQEP1I
+    //
+    GPIO_setPinConfig(GPIO_20_EQEP1A);
+    GPIO_setPadConfig(20, GPIO_PIN_TYPE_STD);
+
+    GPIO_setPinConfig(GPIO_21_EQEP1B);
+    GPIO_setPadConfig(21, GPIO_PIN_TYPE_STD);
+
+    GPIO_setPinConfig(GPIO_23_EQEP1I);
+    GPIO_setPadConfig(23, GPIO_PIN_TYPE_STD);
 
     //
     // Initialize the CAN controller
@@ -165,8 +203,6 @@ void main(void)
                         CAN_INT_STATUS);
 
 
-    //CAN_setInterruptMux(CANB_BASE, (5 << 1));
-
     //
     // Initialize PIE and clear PIE registers. Disables CPU interrupts.
     //
@@ -182,14 +218,17 @@ void main(void)
     //
     EINT;
     ERTM;
-    //
-    // ISRs for each CPU Timer interrupt
-    //
-    Interrupt_register(INT_CANB0, &canbISR);
 
+    Interrupt_register(INT_CANB0, &canbISR);
+    Interrupt_register(INT_TIMER0, &cpuTimer0ISR);
+
+    initCPUTimer();
 
     CAN_enableGlobalInterrupt(CANB_BASE, CAN_GLOBAL_INT_CANINT0);
+    configCPUTimer(CPUTIMER0_BASE, 200000000, 100);
 
+
+    Interrupt_enable(INT_TIMER0);
     Interrupt_enable(INT_CANB0);
 
 
@@ -259,15 +298,13 @@ void main(void)
     // Start CAN module B operations
     //
     CAN_startModule(CANB_BASE);
-
+    initEQEP();
+    CPUTimer_startTimer(CPUTIMER0_BASE);
 
     while(1)
     {
-        /*while(cpuTimer0IntCount == 0);
-        cpuTimer0IntCount = 0;*/
-
-        //GpioDataRegs.GPASET.bit.GPIO0 = 1;
-        cont_w++;
+        while(cpuTimer0IntCount==0);
+        cpuTimer0IntCount = 0x0000;
 
         // Updating receive data
         if (RX_reg & 0x01)
@@ -326,98 +363,6 @@ void main(void)
 // Interrupt Service Routines
 //
 
-/*canbISR(void)
-{
-    uint32_t status;
-
-    //
-    // Read the CAN-B interrupt status (in the CAN_INT register) to find the
-    // cause of the interrupt
-    //
-    status = CAN_getInterruptCause(CANB_BASE);
-
-    //
-    // If the cause is a controller status interrupt, then get the status.
-    // During first iteration of every ISR execution, status = 0x8000,
-    // which simply means CAN_ES != 0x07.
-    //
-    if(status == CAN_INT_INT0ID_STATUS)
-    {
-        //
-        // Read the controller status.  This will return a field of status
-        // error bits that can indicate various errors.  Error processing
-        // is not done in this example for simplicity.  Refer to the
-        // API documentation for details about the error status bits.
-        // The act of reading this status will clear the interrupt.
-        //
-        status = CAN_getStatus(CANB_BASE);  // Return CAN_ES value.
-        //
-        // Now status = 0x00000010, indicating RxOK.
-        //
-
-        //
-        // Check to see if an error occurred.
-        //
-        if(((status  & ~(CAN_STATUS_RXOK)) != CAN_STATUS_LEC_MSK) &&
-           ((status  & ~(CAN_STATUS_RXOK)) != CAN_STATUS_LEC_NONE))
-        {
-            //
-            // Set a flag to indicate some errors may have occurred.
-            //
-            errorFlag = 1;
-        }
-    }
-    //
-    // Check if the cause is the CAN-B receive message object 1. Will be skipped
-    // in the first iteration of every ISR execution
-    //
-
-    else if(status == RX_MSG_OBJ_ID1)
-        {
-            //
-            // Get the received message
-            //
-            CAN_readMessage(CANB_BASE, RX_MSG_OBJ_ID1, rxMsgData);
-
-            //
-            // Getting to this point means that the RX interrupt occurred on
-            // message object 1, and the message RX is complete.  Clear the
-            // message object interrupt.
-            //
-            CAN_clearInterruptStatus(CANB_BASE, RX_MSG_OBJ_ID1);
-
-            //
-            // Increment a counter to keep track of how many messages have been
-            // received. In a real application this could be used to set flags to
-            // indicate when a message is received.
-            //
-            rxMsgCount++;
-
-            //
-            // Since the message was received, clear any error flags.
-            //
-            errorFlag = 0;
-        }
-    //
-    // If something unexpected caused the interrupt, this would handle it.
-    //
-    else
-    {
-        //
-        // Spurious interrupt handling can go here.
-        //
-    }
-
-    //
-    // Clear the global interrupt flag for the CAN interrupt line
-    //
-    CAN_clearGlobalInterruptStatus(CANB_BASE, CAN_GLOBAL_INT_CANINT0);
-
-    //
-    // Acknowledge this interrupt located in group 9
-    //
-    Interrupt_clearACKGroup(INTERRUPT_ACK_GROUP9);
-}*/
 void canbISR(void){
     ++CANintCont;
     status1 = CAN_getInterruptCause(CANB_BASE);
@@ -468,8 +413,113 @@ void canbISR(void){
     Interrupt_clearACKGroup(INTERRUPT_ACK_GROUP9);
 }
 
+__interrupt void cpuTimer0ISR(void){
+    ++cpuTimer0IntCount;
+    ++status1;
+    Interrupt_clearACKGroup(INTERRUPT_ACK_GROUP1);
+}
 
-/*void SetupEQEP(void)
+void initEQEP(void)
 {
+    //
+    // Configure the decoder for quadrature count mode
+    //
+    EQEP_setDecoderConfig(EQEP1_BASE, (EQEP_CONFIG_1X_RESOLUTION |
+                                       EQEP_CONFIG_QUADRATURE |
+                                       EQEP_CONFIG_NO_SWAP));
 
-}*/
+    EQEP_setEmulationMode(EQEP1_BASE, EQEP_EMULATIONMODE_RUNFREE);
+
+    //
+    // Configure the position counter to reset on an index event
+    //
+    EQEP_setPositionCounterConfig(EQEP1_BASE, EQEP_POSITION_RESET_IDX,
+                                  0xFFFFFFFF);
+
+    //
+    // Enable the unit timer, setting the frequency to 100 Hz
+    //
+    EQEP_enableUnitTimer(EQEP1_BASE, (DEVICE_SYSCLK_FREQ / 100));
+
+    //
+    // Configure the position counter to be latched on a unit time out
+    //
+    EQEP_setLatchMode(EQEP1_BASE, EQEP_LATCH_UNIT_TIME_OUT);
+
+    //
+    // Enable the eQEP1 module
+    //
+    EQEP_enableModule(EQEP1_BASE);
+
+    //
+    // Configure and enable the edge-capture unit. The capture clock divider is
+    // SYSCLKOUT/64. The unit-position event divider is QCLK/32.
+    //
+    EQEP_setCaptureConfig(EQEP1_BASE, EQEP_CAPTURE_CLK_DIV_64,
+                          EQEP_UNIT_POS_EVNT_DIV_32);
+    EQEP_enableCapture(EQEP1_BASE);
+}
+
+
+void initCPUTimer(void)
+{
+    //
+    // Initialize timer period to maximum
+    //
+    CPUTimer_setPeriod(CPUTIMER0_BASE, 0xFFFFFFFF);
+    //
+    // Initialize pre-scale counter to divide by 1 (SYSCLKOUT)
+    //
+    CPUTimer_setPreScaler(CPUTIMER0_BASE, 0);
+
+    //
+    // Make sure timer is stopped
+    //
+    CPUTimer_stopTimer(CPUTIMER0_BASE);
+
+    //
+    // Reload all counter register with period value
+    //
+    CPUTimer_reloadTimerCounter(CPUTIMER0_BASE);
+
+    //
+    // Reset interrupt counter
+    //
+    cpuTimer0IntCount = 0;
+}
+
+void configCPUTimer(uint32_t cpuTimer, float freq, float period)
+{
+    uint32_t temp;
+
+    //
+    // Initialize timer period:
+    //
+    temp = (uint32_t)(freq / 1000000 * period);
+    CPUTimer_setPeriod(cpuTimer, temp);
+
+    //
+    // Set pre-scale counter to divide by 1 (SYSCLKOUT):
+    //
+    CPUTimer_setPreScaler(cpuTimer, 0);
+
+    //
+    // Initializes timer control register. The timer is stopped, reloaded,
+    // free run disabled, and interrupt enabled.
+    // Additionally, the free and soft bits are set
+    //
+    CPUTimer_stopTimer(cpuTimer);
+    CPUTimer_reloadTimerCounter(cpuTimer);
+    CPUTimer_setEmulationMode(cpuTimer,
+                              CPUTIMER_EMULATIONMODE_STOPAFTERNEXTDECREMENT);
+    CPUTimer_enableInterrupt(cpuTimer);
+
+    //
+    // Resets interrupt counters for the three cpuTimers
+    //
+    if (cpuTimer == CPUTIMER0_BASE)
+    {
+        cpuTimer0IntCount = 0;
+    }
+
+}
