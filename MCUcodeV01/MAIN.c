@@ -133,6 +133,7 @@ extern void decodeCanMessageToACCurrent(const uint8_t *CanMsgData, float *ACCurr
 extern void decodeCanMessageToTEMP(const uint8_t *CanMsgData, float *TEMPERATURE);
 extern void decodeCanMessageToDQCurr(const uint8_t *CanMsgData, float *dCurrent, float *qCurrent);
 extern void SetupMsgPhaseCurrent(uint8_t *CanMsgData, const float *ArmsCurr);
+extern void Interpolation(const float **Data, const float *x0, float *y0);
 //
 // Function Prototypes
 //
@@ -154,6 +155,75 @@ void main(void)
     //uint8_t txMsgData6[8];
     //uint8_t txMsgData7[8];
     //uint8_t txMsgData8[8];
+
+    // Slippage coefficient Look-Up Table for acceleration model.
+    float mu[67][2]  = {{0.000000,0.000000},
+                        {0.004000,0.191296},
+                        {0.008000,0.379114},
+                        {0.012000,0.560289},
+                        {0.016000,0.732229},
+                        {0.020000,0.893050},
+                        {0.024000,1.041608},
+                        {0.028000,1.177434},
+                        {0.032000,1.300607},
+                        {0.036000,1.411611},
+                        {0.040000,1.511198},
+                        {0.044000,1.600269},
+                        {0.048000,1.679787},
+                        {0.052000,1.750716},
+                        {0.056000,1.813977},
+                        {0.060000,1.870425},
+                        {0.064000,1.920843},
+                        {0.068000,1.965930},
+                        {0.072000,2.006311},
+                        {0.076000,2.042538},
+                        {0.080000,2.075095},
+                        {0.100000,2.195991},
+                        {0.120000,2.270693},
+                        {0.140000,2.318756},
+                        {0.160000,2.350731},
+                        {0.180000,2.372581},
+                        {0.200000,2.387826},
+                        {0.220000,2.398633},
+                        {0.240000,2.406380},
+                        {0.260000,2.411972},
+                        {0.280000,2.416017},
+                        {0.300000,2.418935},
+                        {0.320000,2.421021},
+                        {0.340000,2.422485},
+                        {0.360000,2.423480},
+                        {0.380000,2.424120},
+                        {0.400000,2.424489},
+                        {0.420000,2.424649},
+                        {0.440000,2.424649},
+                        {0.460000,2.424525},
+                        {0.480000,2.424307},
+                        {0.500000,2.424017},
+                        {0.520000,2.423671},
+                        {0.540000,2.423283},
+                        {0.560000,2.422865},
+                        {0.580000,2.422424},
+                        {0.600000,2.421968},
+                        {0.620000,2.421502},
+                        {0.640000,2.421030},
+                        {0.660000,2.420555},
+                        {0.680000,2.420081},
+                        {0.700000,2.419609},
+                        {0.720000,2.419141},
+                        {0.740000,2.418678},
+                        {0.760000,2.418221},
+                        {0.780000,2.417772},
+                        {0.800000,2.417331},
+                        {0.820000,2.416897},
+                        {0.840000,2.416472},
+                        {0.860000,2.416056},
+                        {0.880000,2.415648},
+                        {0.900000,2.415249},
+                        {0.920000,2.414859},
+                        {0.940000,2.414478},
+                        {0.960000,2.414105},
+                        {0.980000,2.413741},
+                        {1.000000,2.413385}};
     //
     // Initialize device clock and peripherals
     //
@@ -346,6 +416,8 @@ void main(void)
         AclTorque = (float)0.01*throttle*MAX_PEAK_TOR;                                 // Calculated Output Torque rated to throttle signal
         /* Is needed to check the ability for controlling d & q currents independently. If we cannot support this control, Torque-Current curves are needed */
         /* A really conflictive control is flux weakening control, where rotor magnetic flux has to be decreased to afford higher velocities*/
+
+
         AclRmsCur = (float)IT_RATE*AclTorque;                                          // Target Phase Current based on
 
         /*SetupMsgPhaseCurrent(txMsgData1, &AclRmsCur);

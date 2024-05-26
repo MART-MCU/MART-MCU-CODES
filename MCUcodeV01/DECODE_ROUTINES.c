@@ -119,4 +119,35 @@ void SetupMsgPhaseCurrent(uint8_t *CanMsgData, const float *ArmsCurr)
     CanMsgData[1] = (temp >> 8) & 0xFF; // Byte alto
 
 }
+void Interpolation(const float Data[][2], size_t size, float x0, float *y0) {
+    if (Data == NULL || y0 == NULL) return;
+
+    uint8_t indx = 0;
+
+    while (indx < size && x0 > Data[indx][0]) {
+        ++indx;
+    }
+
+    if (indx == 0) {
+        *y0 = Data[0][1];
+    } else if (indx == size) {
+        *y0 = Data[size - 1][1];
+    } else {
+
+        float x1 = Data[indx - 1][0];
+        float y1 = Data[indx - 1][1];
+        float x2 = Data[indx][0];
+        float y2 = Data[indx][1];
+
+        *y0 = y1 + (y2 - y1) * (x0 - x1) / (x2 - x1);
+    }
+}
+
+void DynTorSat(float slip){
+    float mu0 = 1;
+    float adherence = Interpolation(mu,67,slip,&mu0);
+    float T_wh =
+    float Fz = (M_VEH*GRAV*L1 + (M_VEH*accel + f_x_a)*H - T_wh + 2*J_D*accel/r)/L;
+
+}
 

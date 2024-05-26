@@ -1,5 +1,9 @@
-2024/05/05-16:20:26.227 6ee8 Log #3: 2 ops saved to Table #4 OK
-2024/05/05-16:20:26.228 6ee8 Archiving C:\GITHUB\MART-MCU-CODES\.jxbrowser.userdata\Default\Site Characteristics Database/000003.log: OK
-2024/05/05-16:20:26.228 6ee8 Table #4: 2 entries OK
-2024/05/05-16:20:26.229 6ee8 Archiving C:\GITHUB\MART-MCU-CODES\.jxbrowser.userdata\Default\Site Characteristics Database/MANIFEST-000001: OK
-2024/05/05-16:20:26.241 6ee8 **** Repaired leveldb C:\GITHUB\MART-MCU-CODES\.jxbrowser.userdata\Default\Site Characteristics Database; recovered 1 files; 191 bytes. Some data may have been lost. ****
+2024/05/06-08:58:19.506 42d8 Log #3: 2 ops saved to Table #7 OK
+2024/05/06-08:58:19.506 42d8 Archiving C:\GITHUB\MART-MCU-CODES\.jxbrowser.userdata\Default\Site Characteristics Database/000003.log: OK
+2024/05/06-08:58:19.517 42d8 Log #6: 1 ops saved to Table #8 OK
+2024/05/06-08:58:19.517 42d8 Archiving C:\GITHUB\MART-MCU-CODES\.jxbrowser.userdata\Default\Site Characteristics Database/000006.log: OK
+2024/05/06-08:58:19.521 42d8 Table #4: 2 entries OK
+2024/05/06-08:58:19.521 42d8 Table #7: 2 entries OK
+2024/05/06-08:58:19.521 42d8 Table #8: 1 entries OK
+2024/05/06-08:58:19.523 42d8 Archiving C:\GITHUB\MART-MCU-CODES\.jxbrowser.userdata\Default\Site Characteristics Database/MANIFEST-000001: OK
+2024/05/06-08:58:19.526 42d8 **** Repaired leveldb C:\GITHUB\MART-MCU-CODES\.jxbrowser.userdata\Default\Site Characteristics Database; recovered 3 files; 544 bytes. Some data may have been lost. ****
