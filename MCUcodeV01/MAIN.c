@@ -133,7 +133,8 @@ extern void decodeCanMessageToACCurrent(const uint8_t *CanMsgData, float *ACCurr
 extern void decodeCanMessageToTEMP(const uint8_t *CanMsgData, float *TEMPERATURE);
 extern void decodeCanMessageToDQCurr(const uint8_t *CanMsgData, float *dCurrent, float *qCurrent);
 extern void SetupMsgPhaseCurrent(uint8_t *CanMsgData, const float *ArmsCurr);
-extern void Interpolation(const float **Data, const float *x0, float *y0);
+extern void Interpolation(const float Data[][2], int size, float x0, float *y0);
+extern void DynTorSat(int slip, const float **mu);
 //
 // Function Prototypes
 //

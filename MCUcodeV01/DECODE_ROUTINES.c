@@ -119,7 +119,7 @@ void SetupMsgPhaseCurrent(uint8_t *CanMsgData, const float *ArmsCurr)
     CanMsgData[1] = (temp >> 8) & 0xFF; // Byte alto
 
 }
-void Interpolation(const float Data[][2], size_t size, float x0, float *y0) {
+void Interpolation(const float Data[][2], int size, float x0, float *y0) {
     if (Data == NULL || y0 == NULL) return;
 
     uint8_t indx = 0;
@@ -143,11 +143,11 @@ void Interpolation(const float Data[][2], size_t size, float x0, float *y0) {
     }
 }
 
-void DynTorSat(float slip){
-    float mu0 = 1;
+void DynTorSat(int slip,const float **mu){
+    /*float mu0 = 1;
     float adherence = Interpolation(mu,67,slip,&mu0);
-    float T_wh =
-    float Fz = (M_VEH*GRAV*L1 + (M_VEH*accel + f_x_a)*H - T_wh + 2*J_D*accel/r)/L;
+    float T_wh;
+    float Fz = (M_VEH*GRAV*L1 + (M_VEH*accel + f_x_a)*H - T_wh + 2*J_D*accel/r)/L;*/
 
 }
 
