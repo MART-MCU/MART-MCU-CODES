@@ -42,7 +42,7 @@ void decodeCanMessageToDCVoltage(const uint8_t *CanMsgData, float *DCVoltage) {
     temp |=  (uint16_t)CanMsgData[7];
 
     int16_t temp_value = *(int16_t*)&temp;
-    float result = (float)temp_value / 10.0f;
+    float result = (float)temp_value;
     *DCVoltage = result;
 }
 
@@ -119,7 +119,7 @@ void SetupMsgPhaseCurrent(uint8_t *CanMsgData, const float *ArmsCurr)
     CanMsgData[1] = (temp >> 8) & 0xFF; // Byte alto
 
 }
-<<<<<<< HEAD
+
 /*void Interpolation(const float Data[][2], size_t size, float x0, float *y0) {
 =======
 void Interpolation(const float Data[][2], int size, float x0, float *y0) {
@@ -150,14 +150,9 @@ void Interpolation(const float Data[][2], int size, float x0, float *y0) {
 void DynTorSat(int slip,const float **mu){
     /*float mu0 = 1;
     float adherence = Interpolation(mu,67,slip,&mu0);
-<<<<<<< HEAD
     float T_wh =
     float Fz = (M_VEH*GRAV*L1 + (M_VEH*accel + f_x_a)*H - T_wh + 2*J_D*accel/r)/L;
-}*/
-=======
     float T_wh;
-    float Fz = (M_VEH*GRAV*L1 + (M_VEH*accel + f_x_a)*H - T_wh + 2*J_D*accel/r)/L;*/
-
+    float Fz = (M_VEH*GRAV*L1 + (M_VEH*accel + f_x_a)*H - T_wh + 2*J_D*accel/r)/L;
 }
->>>>>>> 45e086287a3c373d4f5c9594d1e9cfb802171309
-
+*/

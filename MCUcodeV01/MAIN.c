@@ -22,7 +22,9 @@
 // Defines
 //
 #define MSG_DATA_LENGTH_RX 0   // "Don't care" for a Receive mailbox //REVISAR QUE SIGNIFICA ESTE DATA LENGTH
-#define MSG_DATA_LENGTH_TX 8
+#define MSG_DATA_LENGTH_TX1 2
+#define MSG_DATA_LENGTH_TX3 8
+#define MSG_DATA_LENGTH_TX4 8
 
 /* ----- READING MAILBOXES -----*/
 #define RX_MSG_OBJ_ID1     1   // Use mailbox 1
@@ -87,6 +89,14 @@ uint8_t rxMsgData3[8];
 uint8_t rxMsgData4[8];
 uint8_t rxMsgData5[8];
 
+uint8_t txMsgData1[8];
+uint8_t txMsgData2[8];
+uint8_t txMsgData3[8] = {0x00,0x00,0x00,0x00,0xFF,0xFF,0xFF,0xFF};
+uint8_t txMsgData4[8] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0x00};
+//uint8_t txMsgData5[8];
+//uint8_t txMsgData6[8];
+//uint8_t txMsgData7[8];
+//uint8_t txMsgData8[8];
 volatile uint32_t errorFlag = 0;
 float cnt = 0;
 
@@ -113,6 +123,8 @@ float BrkRmsCur     = 0;
 float AclRmsCur     = 0;
 uint8_t FaultCode   = 0;
 float    CANintCont = 0;
+uint8_t DE          = 0;
+int32_t ERPM_rear_c = 0;
 
 uint32_t status1;
 uint32_t status2;
@@ -148,15 +160,6 @@ void main(void)
     //
     // Local Variables
     //
-    uint8_t txMsgData1[8];
-    uint8_t txMsgData2[8];
-    //uint8_t txMsgData3[8];
-    //uint8_t txMsgData4[8];
-    //uint8_t txMsgData5[8];
-    //uint8_t txMsgData6[8];
-    //uint8_t txMsgData7[8];
-    //uint8_t txMsgData8[8];
-
     // Slippage coefficient Look-Up Table for acceleration model.
     float mu[67][2]  = {{0.000000,0.000000},
                         {0.004000,0.191296},
@@ -265,7 +268,7 @@ void main(void)
     // tighter timing control. Additionally, consult the device data sheet
     // for more information about the CAN module clocking.
     //
-    CAN_setBitRate(CANB_BASE, DEVICE_SYSCLK_FREQ, 500000, 16);
+    CAN_setBitRate(CANB_BASE, DEVICE_SYSCLK_FREQ, 1000000, 16);
     //
     // Enable interrupts on the CAN B peripheral.
     // Enables Int.line0, Error & Status Change interrupts
@@ -296,7 +299,7 @@ void main(void)
     initCPUTimer();
 
     CAN_enableGlobalInterrupt(CANB_BASE, CAN_GLOBAL_INT_CANINT0);
-    configCPUTimer(CPUTIMER0_BASE, 200000000, 100);
+    configCPUTimer(CPUTIMER0_BASE, 200000000, 25000);
 
 
     Interrupt_enable(INT_TIMER0);
@@ -340,18 +343,18 @@ void main(void)
 
     CAN_setupMessageObject(CANB_BASE, TX_MSG_OBJ_ID1, 0x21,
                            CAN_MSG_FRAME_STD, CAN_MSG_OBJ_TYPE_TX, 0,
-                           CAN_MSG_OBJ_NO_FLAGS, MSG_DATA_LENGTH_TX);
+                           CAN_MSG_OBJ_NO_FLAGS, MSG_DATA_LENGTH_TX1);
 
     /*CAN_setupMessageObject(CANB_BASE, TX_MSG_OBJ_ID2, 0x41,
                            CAN_MSG_FRAME_STD, CAN_MSG_OBJ_TYPE_TX, 0,
-                           CAN_MSG_OBJ_NO_FLAGS, MSG_DATA_LENGTH);
-    CAN_setupMessageObject(CANB_BASE, TX_MSG_OBJ_ID3, 0xE1,
+                           CAN_MSG_OBJ_NO_FLAGS, MSG_DATA_LENGTH);*/
+    CAN_setupMessageObject(CANB_BASE, TX_MSG_OBJ_ID3, 0x61,
                            CAN_MSG_FRAME_STD, CAN_MSG_OBJ_TYPE_TX, 0,
-                           CAN_MSG_OBJ_NO_FLAGS, MSG_DATA_LENGTH);
-    CAN_setupMessageObject(CANB_BASE, TX_MSG_OBJ_ID4, 0x101,
+                           CAN_MSG_OBJ_NO_FLAGS, MSG_DATA_LENGTH_TX3);
+    CAN_setupMessageObject(CANB_BASE, TX_MSG_OBJ_ID4, 0x181,
                            CAN_MSG_FRAME_STD, CAN_MSG_OBJ_TYPE_TX, 0,
-                           CAN_MSG_OBJ_NO_FLAGS, MSG_DATA_LENGTH);
-    CAN_setupMessageObject(CANB_BASE, TX_MSG_OBJ_ID5, 0x121,
+                           CAN_MSG_OBJ_NO_FLAGS, MSG_DATA_LENGTH_TX4);
+    /*CAN_setupMessageObject(CANB_BASE, TX_MSG_OBJ_ID5, 0x121,
                            CAN_MSG_FRAME_STD, CAN_MSG_OBJ_TYPE_TX, 0,
                            CAN_MSG_OBJ_NO_FLAGS, MSG_DATA_LENGTH);
     CAN_setupMessageObject(CANB_BASE, TX_MSG_OBJ_ID6, 0x141,
@@ -409,6 +412,7 @@ void main(void)
             brake    = (int8_t)rxMsgData5[1];
             DriveEnable = rxMsgData5[3];
             DigData     = rxMsgData5[2];
+            RX_reg &= ~(0x10);
         }
 
         estTorque = (float)0.49125*qCurrent;                                           // Estimated Torque based on dq motor model
@@ -421,15 +425,40 @@ void main(void)
 
         AclRmsCur = (float)IT_RATE*AclTorque;                                          // Target Phase Current based on
 
-        /*SetupMsgPhaseCurrent(txMsgData1, &AclRmsCur);
-        CAN_sendMessage(CANB_BASE, TX_MSG_OBJ_ID1, MSG_DATA_LENGTH_TX, txMsgData1);
+        SetupMsgPhaseCurrent(txMsgData1, &AclRmsCur);
+        CAN_sendMessage(CANB_BASE, TX_MSG_OBJ_ID1, MSG_DATA_LENGTH_TX1, txMsgData1);
 
         BrkTorque = (float)0.01*brake*MAX_PEAK_TOR;                                 // Calculated Output Torque rated to Brake signal
         BrkRmsCur = (float)IT_RATE*BrkTorque;
 
         SetupMsgPhaseCurrent(txMsgData1, &BrkRmsCur);
-        //CAN_sendMessage(CANB_BASE, TX_MSG_OBJ_ID2, MSG_DATA_LENGTH_TX, txMsgData2);*/
-    }
+        //CAN_sendMessage(CANB_BASE, TX_MSG_OBJ_ID2, MSG_DATA_LENGTH_TX, txMsgData2);
+
+        if (DE == 1)
+        {
+            uint32_t temp = (uint32_t)(ERPM_rear_c);
+
+            txMsgData3[0] = (uint8_t)(0xFF & (temp >> 24));
+            txMsgData3[1] = (uint8_t)(0xFF & (temp >> 16));
+            txMsgData3[2] = (uint8_t)(0xFF & (temp >>  8));
+            txMsgData3[3] = (uint8_t)(0xFF & (temp >>  0));
+
+            CAN_sendMessage(CANB_BASE, TX_MSG_OBJ_ID3, MSG_DATA_LENGTH_TX3, txMsgData3);
+            txMsgData4[7] = 0x01;
+            CAN_sendMessage(CANB_BASE, TX_MSG_OBJ_ID4, MSG_DATA_LENGTH_TX4, txMsgData4);
+            while(((HWREGH(CANB_BASE + CAN_O_ES) & CAN_ES_TXOK)) !=  CAN_ES_TXOK)
+           {
+           }
+        }
+        else
+        {
+            txMsgData4[7] = 0x00;
+            CAN_sendMessage(CANB_BASE, TX_MSG_OBJ_ID4, MSG_DATA_LENGTH_TX4, txMsgData4);
+            while(((HWREGH(CANB_BASE + CAN_O_ES) & CAN_ES_TXOK)) !=  CAN_ES_TXOK)
+           {
+           }
+        }
+}
 }
 
 //
